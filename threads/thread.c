@@ -277,7 +277,7 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
-  bitmap_release(thread_current()->file_ids); // Release bitmap
+  bitmap_destroy(thread_current()->file_ids); // Release bitmap
   process_exit ();
 #endif
 
