@@ -192,6 +192,14 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
 
+  /* Init bitmap for file_id control */
+  #ifdef USERPROG
+  t->file_ids = bitmap_create(128);
+  // Reserve 0,1 for console
+  bitmap_mark(t->file_ids, 0);
+  bitmap_mark(t->file_ids, 1);
+  #endif
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -437,14 +445,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
-  /* Init bitmap for file_id control */
-  #ifdef USERPROG
-  t->file_ids = bitmap_create(128);
-  // Reserve 0,1 for console
-  bitmap_mark(t->file_ids, 0);
-  bitmap_mark(t->file_ids, 1);
-  #endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
