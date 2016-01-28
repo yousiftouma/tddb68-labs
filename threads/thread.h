@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "lib/kernel/bitmap.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -94,6 +95,10 @@ struct thread
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
+    struct file *open_files[128];         /* User opened file id's (0, 1 reserved) */
+    struct bitmap* file_ids;          /* Keep track of open files */
+
+
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
