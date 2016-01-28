@@ -31,11 +31,18 @@ syscall_handler (struct intr_frame *f UNUSED)
   			const char* buf = ((char**)arg_pr)[2];
   			size_t buf_size = ((size_t*)arg_pr)[3];
   			putbuf(buf, buf_size);
+  			f->eax = buf_size;
 		}
+  		break;
+
+  	case SYS_CREATE:
+  		;
+  		bool success = false;
+  		success = filesys_create(((char**)arg_pr)[1], ((int*)arg_pr)[2]);
+  		f->eax = success;
   		break;
   	default:
   		printf("Unknown system call, %d", *(int*)f->esp);
   }
-
-  thread_exit ();
+  //thread_exit();
 }
