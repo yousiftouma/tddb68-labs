@@ -55,8 +55,6 @@ void syscall_exit();
 void syscall_halt();
 
 
-
-
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
@@ -121,7 +119,7 @@ int syscall_open(void* arg_ptr) {
 
 void syscall_close(void* arg_ptr) {
   int fd = ((int*)arg_ptr)[1];
-  if (bitmap_test(thread_current()->file_ids, fd)) {
+  if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
     file_close(thread_current()->open_files[fd]);
   }
   bitmap_set(thread_current()->file_ids, fd, 0);
