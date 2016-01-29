@@ -285,7 +285,17 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
-  bitmap_destroy(thread_current()->file_ids); // Release bitmap
+  // Close all files
+  if (thread_current()->open_files != NULL && thread_current()->file_ids != NULL) {
+    int i;
+    for (i = 2; i < 128; i++) {
+      if (bitmap_test(thread_current()->file_ids, i)) {
+        file_close(thread_current()->open_files[i]);
+      }
+    }
+    bitmap_destroy(thread_current()->file_ids); // Release bitmap
+  }
+
   process_exit ();
 #endif
 
