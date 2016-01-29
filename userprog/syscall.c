@@ -12,98 +12,172 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+/*
+  Creates a new file with a specified name and size, returns true if successful,
+  else false
+*/
+bool syscall_create(void* arg_ptr);
+
+/*
+  Opens the file with the given name, and returns a file descriptor (fd),
+  returns fd = -1 if no file with that name exists or if the user program
+  has too many files opened allready
+*/
+int syscall_open(void* arg_ptr);
+
+/*
+  Closes the file with the given name if opened
+*/
+void syscall_close(void* arg_ptr);
+
+/*
+  Writes size bytes from the buffer to the open file with the given fd,
+  if the fd = 1 then the buffer is written to the console. Returns the number
+  of bytes sucessfully written
+*/
+int syscall_write(void* arg_ptr);
+
+/*
+  Reads size bytes from the file with the given fd, if fd = STIN_FILENO then
+  we read from console instead. Returns the number of bytes actually read.
+*/
+int syscall_read(void* arg_ptr);
+
+/*
+  Kills the userprogram by killing the thread and thereby realesing all allocated
+  resources and closes all open files
+*/
+void syscall_exit();
+
+/*
+  Halts the system and power down the system
+*/
+void syscall_halt();
+
+
+
+
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   int syscall_nr = *(int*)(f->esp);
-  void* arg_pr = (f->esp);
+  void* arg_ptr = (f->esp);
 
 
   switch (syscall_nr) {	
   	// System halt
   	case SYS_HALT :
-  		power_off();
+  		syscall_halt();
   		break;
 
   	case SYS_WRITE:
-      ;
-      int fd = ((int*)arg_pr)[1];
-      void *buf = ((void**)arg_pr)[2];
-      int size = ((int*)arg_pr)[3];
-
-  		// Write to console
-  		if (fd == STDOUT_FILENO) {
-  			const char* char_buf = ((char**)arg_pr)[2];
-  			putbuf(char_buf, size);
-  			f->eax = size;
-		  }
-      else {
-        //if (bitmap_test(thread_current()->file_ids, fd));
-        //TODO make sure to handle non opened files
-        //printf("Writing files");
-        f->eax = size;
-      }
-
+      f->eax = syscall_write(arg_ptr);
   		break;
 
   	case SYS_CREATE:
-  		;
-  		bool success = false;
-  		success = filesys_create(((char**)arg_pr)[1], ((int*)arg_pr)[2]);
-  		f->eax = success;
+  		f->eax = syscall_create(arg_ptr);
   		break;
 
   	case SYS_OPEN:
-      ;
-      char* file_name = ((char**)arg_pr)[1];
-      struct file *new_open = filesys_open(file_name);
-      
-      // Failed to open
-      if (new_open != NULL) {
-        int fnd = bitmap_scan_and_flip (thread_current()->file_ids, 0, 1, 0);
-        thread_current()->open_files[fnd] = new_open;
-        f->eax = fnd;
-      }
-      else {
-        f->eax = -1;
-      }
-
+      f->eax = syscall_open(arg_ptr);
       break;
 
     case SYS_READ:
-      ;
-      int fd_r = ((int*)arg_pr)[1];
-      void *buf_r = ((void**)arg_pr)[2];
-      int size_r = ((int*)arg_pr)[3];
-      int bytes_read_r = -1;
-
-      // Read from console if STDIN_FILENO
-      if (fd_r == STDIN_FILENO) {
-        bytes_read_r = 0;
-        char* char_buf_r = (char*)buf_r;
-        while (bytes_read_r < size_r) {
-          char_buf_r[bytes_read_r] = (char)input_getc();
-          bytes_read_r++;
-        }
-        f->eax = bytes_read_r;
-      }
-      else {
-        if (fd_r < 128 && bitmap_test(thread_current()->file_ids, fd_r)) {
-          struct file* file_to_read = thread_current()->open_files[fd_r];
-          bytes_read_r = file_read(file_to_read, buf_r, size_r);
-        }
-        f->eax = bytes_read_r;
-      }
+      f->eax = syscall_read(arg_ptr);
       break;
 
     case SYS_CLOSE:
-      ;
-      int fd_close = ((int*)arg_pr)[1];
-      bitmap_set(thread_current()->file_ids, fd_close, 0);
+      syscall_close(arg_ptr);
       break;
 
+    case SYS_EXIT:
+      syscall_exit();
+
   	default:
-  		printf("Unknown system call, %d", *(int*)f->esp);
+  		printf("Unknown system call, %d", syscall_nr);
   }
-  //thread_exit();
+}
+
+bool syscall_create(void* arg_ptr) {
+  char* file_name = ((char**)arg_ptr)[1];
+  int file_size = ((int*)arg_ptr)[2];
+  return filesys_create(file_name, file_size);
+}
+
+int syscall_open(void* arg_ptr) {
+  char* file_name = ((char**)arg_ptr)[1];
+  struct file *new_open = filesys_open(file_name);
+  
+  // Check sucessful open
+  if (new_open != NULL) {
+    int fnd = bitmap_scan_and_flip(thread_current()->file_ids, 0, 1, 0);
+    if (fnd != BITMAP_ERROR) { // Not enough space
+      thread_current()->open_files[fnd] = new_open;
+      return fnd;
+    }
+  }
+  return -1;
+}
+
+void syscall_close(void* arg_ptr) {
+  int fd = ((int*)arg_ptr)[1];
+  if (bitmap_test(thread_current()->file_ids, fd)) {
+    file_close(thread_current()->open_files[fd]);
+  }
+  bitmap_set(thread_current()->file_ids, fd, 0);
+}
+
+int syscall_write(void* arg_ptr) {
+  int bytes_written = 0;
+  
+  int fd = ((int*)arg_ptr)[1];
+  void *buf = ((void**)arg_ptr)[2];
+  int size = ((int*)arg_ptr)[3];
+
+  // Write to console
+  if (fd == STDOUT_FILENO) {
+    const char* char_buf = (char*)buf;
+    putbuf(char_buf, size);
+    bytes_written = size;
+  }
+  else {
+    if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
+      struct file* file_to_write = thread_current()->open_files[fd];
+      bytes_written = file_write(file_to_write, buf, size);
+    }
+  }
+  return bytes_written;  
+}
+
+int syscall_read(void* arg_ptr) {
+  int fd = ((int*)arg_ptr)[1];
+  void *buf = ((void**)arg_ptr)[2];
+  int size = ((int*)arg_ptr)[3];
+
+  int bytes_read = -1;
+
+  // Read from console if STDIN_FILENO
+  if (fd == STDIN_FILENO) {
+    bytes_read = 0;
+    char* char_buf = (char*)buf;
+    while (bytes_read < size) {
+      char_buf[bytes_read] = (char)input_getc();
+      bytes_read++;
+    }
+  }
+  else {
+    if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
+      struct file* file_to_read = thread_current()->open_files[fd];
+      bytes_read = file_read(file_to_read, buf, size);
+    }
+  }
+  return bytes_read;
+}
+
+void syscall_exit() {
+  thread_exit(); // Kill thread and free resources
+}
+
+void syscall_halt() {
+  power_off();
 }
