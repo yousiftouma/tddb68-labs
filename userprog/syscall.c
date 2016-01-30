@@ -3,6 +3,10 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "threads/init.h"
+#include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -16,19 +20,19 @@ syscall_init (void)
   Creates a new file with a specified name and size, returns true if successful,
   else false
 */
-bool syscall_create(void* arg_ptr);
+    bool syscall_create(void* arg_ptr);
 
 /*
   Opens the file with the given name, and returns a file descriptor (fd),
   returns fd = -1 if no file with that name exists or if the user program
   has too many files opened allready
 */
-int syscall_open(void* arg_ptr);
+  int syscall_open(void* arg_ptr);
 
 /*
   Closes the file with the given name if opened
 */
-void syscall_close(void* arg_ptr);
+  void syscall_close(void* arg_ptr);
 
 /*
   Writes size bytes from the buffer to the open file with the given fd,
@@ -41,59 +45,57 @@ int syscall_write(void* arg_ptr);
   Reads size bytes from the file with the given fd, if fd = STIN_FILENO then
   we read from console instead. Returns the number of bytes actually read.
 */
-int syscall_read(void* arg_ptr);
+  int syscall_read(void* arg_ptr);
 
 /*
   Kills the userprogram by killing the thread and thereby realesing all allocated
   resources and closes all open files
 */
-void syscall_exit();
+  void syscall_exit(void);
 
 /*
   Halts the system and power down the system
 */
-void syscall_halt();
+  void syscall_halt(void);
 
 
-static void
-syscall_handler (struct intr_frame *f UNUSED) 
-{
-  int syscall_nr = *(int*)(f->esp);
-  void* arg_ptr = (f->esp);
+static void syscall_handler (struct intr_frame *f UNUSED) {
+    int syscall_nr = *(int*)(f->esp);
+    void* arg_ptr = (f->esp);
 
 
-  switch (syscall_nr) {	
-  	// System halt
-  	case SYS_HALT :
-  		syscall_halt();
-  		break;
+    switch (syscall_nr) {	
+      case SYS_HALT :
+        syscall_halt();
+        break;
 
-  	case SYS_WRITE:
-      f->eax = syscall_write(arg_ptr);
-  		break;
+      case SYS_WRITE:
+        f->eax = syscall_write(arg_ptr);
+        break;
 
-  	case SYS_CREATE:
-  		f->eax = syscall_create(arg_ptr);
-  		break;
+      case SYS_CREATE:
+        f->eax = syscall_create(arg_ptr);
+        break;
 
-  	case SYS_OPEN:
-      f->eax = syscall_open(arg_ptr);
-      break;
+      case SYS_OPEN:
+        f->eax = syscall_open(arg_ptr);
+        break;
 
-    case SYS_READ:
-      f->eax = syscall_read(arg_ptr);
-      break;
+      case SYS_READ:
+        f->eax = syscall_read(arg_ptr);
+        break;
 
-    case SYS_CLOSE:
-      syscall_close(arg_ptr);
-      break;
+      case SYS_CLOSE:
+        syscall_close(arg_ptr);
+        break;
 
-    case SYS_EXIT:
-      syscall_exit();
+      case SYS_EXIT:
+        syscall_exit();
+        break;
 
-  	default:
-  		printf("Unknown system call, %d", syscall_nr);
-  }
+      default:
+        printf("Unknown system call, %d", syscall_nr);
+    }
 }
 
 bool syscall_create(void* arg_ptr) {
@@ -105,7 +107,7 @@ bool syscall_create(void* arg_ptr) {
 int syscall_open(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
   struct file *new_open = filesys_open(file_name);
-  
+
   // Check sucessful open
   if (new_open != NULL) {
     int fnd = bitmap_scan_and_flip(thread_current()->file_ids, 0, 1, 0);
@@ -127,7 +129,7 @@ void syscall_close(void* arg_ptr) {
 
 int syscall_write(void* arg_ptr) {
   int bytes_written = 0;
-  
+
   int fd = ((int*)arg_ptr)[1];
   void *buf = ((void**)arg_ptr)[2];
   int size = ((int*)arg_ptr)[3];
@@ -137,7 +139,7 @@ int syscall_write(void* arg_ptr) {
     const char* char_buf = (char*)buf;
     putbuf(char_buf, size);
     bytes_written = size;
-  }
+  } 
   else {
     if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
       struct file* file_to_write = thread_current()->open_files[fd];
