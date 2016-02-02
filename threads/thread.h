@@ -106,6 +106,12 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+struct sleeping_thread {
+  struct thread* thread;
+  int64_t wake_ticks;
+  struct list_elem elem;
+};
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -137,5 +143,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+struct list* get_sleep_list(void);
 
 #endif /* threads/thread.h */
