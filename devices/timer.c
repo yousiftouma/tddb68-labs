@@ -8,6 +8,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "lib/kernel/list.h"
+#include "threads/malloc.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -93,26 +94,12 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-bool thread_sleep_comp_func(const struct list_elem *a,
-                            const struct list_elem *b,
-                            void *aux) {
-  struct sleeping_thread* t_a = list_entry(a, struct sleeping_thread, elem);
-  struct sleeping_thread* t_b = list_entry(b, struct sleeping_thread, elem);
-  //printf("Comparing results %d", (int) t_a->wake_ticks < t_b->wake_ticks);
-  return t_a->wake_ticks < t_b->wake_ticks;
-}
-
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
 
-  /*
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
-  */
   enum intr_level old_level;
   old_level = intr_disable ();
   struct sleeping_thread* t = malloc(sizeof(struct sleeping_thread));
@@ -120,16 +107,14 @@ timer_sleep (int64_t ticks)
   t->wake_ticks = start + ticks;
 
   struct list* sleep_list = get_sleep_list();
-
-  //printf("Is empty: %d", list_size(sleep_list));
   if (list_empty(sleep_list)) {
     list_push_back(sleep_list, &t->elem);
   } else {
     list_insert_ordered(sleep_list, &(t->elem), &thread_sleep_comp_func, NULL);
   }
 
-  //printf("Sleeping thread: %d, for: %d ticks", (int) t->thread->tid, (int) ticks);
   thread_block(); // Go to sleep, wait for OS to wake us
+  free(t);
   intr_set_level (old_level);
 }
 
@@ -172,22 +157,25 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
   struct list* sleep_list = get_sleep_list();
 
-  // Wake processes if needed
   int64_t curr_time = timer_ticks();
-  struct sleeping_thread* t;
 
   old_level = intr_disable ();
-  if (!list_empty(sleep_list)) {
-    t = list_entry(list_front(sleep_list), struct sleeping_thread, elem);
-  }
 
-  while (!list_empty(sleep_list) && t->wake_ticks <= curr_time) {
-    list_pop_front(sleep_list);
-    thread_unblock(t->thread);
-    free(t);
-    t = list_entry(list_front(sleep_list), struct sleeping_thread, elem);
-  }
-  //intr_set_level(old_level);
+  struct list_elem *e;
+  for (e = list_begin(sleep_list); e != list_end(sleep_list);
+       e = list_next(e)) {
+      struct sleeping_thread *t = list_entry(e, struct sleeping_thread, elem);
+      
+      // Has finished sleeping
+      if (t->wake_ticks <= curr_time) {
+        list_remove(e);
+        thread_unblock(t->thread);
+      }
+      else {
+        break; // Sorted, no need to look further
+      }
+    }
+  intr_set_level(old_level);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

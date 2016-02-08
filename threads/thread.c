@@ -100,8 +100,23 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 }
 
+/*
+  Getter for the queue of sleeping threads
+*/
 struct list* get_sleep_list(void) {
   return &sleep_list;
+}
+
+/*
+  Comparator for sorted insertion in the sleeping queue
+*/
+bool thread_sleep_comp_func(const struct list_elem *a,
+                            const struct list_elem *b,
+                            void *aux) {
+  struct sleeping_thread *t_a, *t_b;
+  t_a = list_entry(a, struct sleeping_thread, elem);
+  t_b = list_entry(b, struct sleeping_thread, elem);
+  return t_a->wake_ticks < t_b->wake_ticks;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.

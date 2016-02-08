@@ -145,5 +145,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 struct list* get_sleep_list(void);
+bool thread_sleep_comp_func(const struct list_elem *a,
+                            const struct list_elem *b,
+                            void *aux);
 
 #endif /* threads/thread.h */
