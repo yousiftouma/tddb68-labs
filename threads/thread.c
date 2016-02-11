@@ -28,6 +28,10 @@ static struct list ready_list;
 sleep time has passed */
 static struct list sleep_list;
 
+/* List of all living processes, processes are added as they are initialized
+and removed when destroyed */
+static struct list thread_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,6 +96,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init(&sleep_list);
+  list_init(&thread_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -166,6 +171,32 @@ thread_print_stats (void)
           idle_ticks, kernel_ticks, user_ticks);
 }
 
+tid_t thread_create_with_parent(const char *name, int priority, 
+                thread_func *function, void *aux, struct child_status *parent) {
+  tid_t tid = thread_create(name, priority, function, aux);
+  if (tid != TID_ERROR) {
+    struct thread *t = get_thread(tid);
+     t->parent = parent; // Set pointer to shared meta data
+    return tid;
+  }
+  return TID_ERROR;
+}
+
+/*
+  Returns the thread with the given tid, returns NULL if no match is found
+*/
+struct thread* get_thread(tid_t tid) {
+  struct list_elem *e;
+  for (e = list_begin(&thread_list); e != list_end(&thread_list);
+       e = list_next(e)) {
+      struct thread *t = list_entry(e, struct thread, thread_list_elem);
+      if (t->tid == tid) {
+        return t;
+      }
+  }
+  return NULL;
+}
+
 /* Creates a new kernel thread named NAME with the given initial
    PRIORITY, which executes FUNCTION passing AUX as the argument,
    and adds it to the ready queue.  Returns the thread identifier
@@ -223,6 +254,8 @@ thread_create (const char *name, int priority,
   bitmap_mark(t->file_ids, 0);
   bitmap_mark(t->file_ids, 1);
   #endif
+
+  list_push_back(&thread_list, &t->thread_list_elem);
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -319,7 +352,7 @@ thread_exit (void)
     }
     bitmap_destroy(thread_current()->file_ids); // Release bitmap
   }
-
+  list_remove(&thread_list, &t->thread_list_elem);
   process_exit ();
 #endif
 
