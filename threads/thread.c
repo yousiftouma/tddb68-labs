@@ -248,6 +248,14 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  
+  //enum intr_level old_level = intr_disable ();  
+
+  struct child_status *parent = malloc(sizeof(struct child_status));
+  t->parent = parent;
+  sema_init(&parent->parent_awake, 0);
+  sema_down(&parent->parent_awake); // Wait for child to wake us
+  //intr_set_level (old_level);
 
   return tid;
 }
