@@ -1,59 +1,60 @@
 
 #### pintos
-*/src/userprog/build
-*/src/userprog/bochsrc.txt
-*/src/userprog/bochsout.txt
+userprog/build
+userprog/bochsrc.txt
+examples/
+*/userprog/bochsout.txt
 
-*/src/examples/lib/user/*.d
-*/src/examples/lib/*.d
+*/examples/lib/user/*.d
+*/examples/lib/*.d
 
-*/src/examples/cat
-*/src/examples/cmp
-*/src/examples/cp
-*/src/examples/echo
-*/src/examples/halt
-*/src/examples/hex-dump
-*/src/examples/ls
-*/src/examples/mcat
-*/src/examples/mcp
-*/src/examples/mkdir
-*/src/examples/pwd
-*/src/examples/rm
-*/src/examples/shell
-*/src/examples/bubsort
-*/src/examples/insult
-*/src/examples/lineup
-*/src/examples/matmult
-*/src/examples/recursor
-*/src/examples/lab2test
-*/src/examples/pfs_writer
-*/src/examples/pfs
-*/src/examples/sumargv
-*/src/examples/longrun
-*/src/examples/pfs_reader
-*/src/examples/child
-*/src/examples/parent
-*/src/examples/dummy
-*/src/examples/create-bad
-*/src/examples/*.d
+*/examples/cat
+*/examples/cmp
+*/examples/cp
+*/examples/echo
+*/examples/halt
+*/examples/hex-dump
+*/examples/ls
+*/examples/mcat
+*/examples/mcp
+*/examples/mkdir
+*/examples/pwd
+*/examples/rm
+*/examples/shell
+*/examples/bubsort
+*/examples/insult
+*/examples/lineup
+*/examples/matmult
+*/examples/recursor
+*/examples/lab2test
+*/examples/pfs_writer
+*/examples/pfs
+*/examples/sumargv
+*/examples/longrun
+*/examples/pfs_reader
+*/examples/child
+*/examples/parent
+*/examples/dummy
+*/examples/create-bad
+*/examples/*.d
 
-*/src/TAGS
+*/TAGS
 
-*/src/filesys/build
-*/src/filesys/bochsrc.txt
-*/src/filesys/bochsout.txt
+*/filesys/build
+*/filesys/bochsrc.txt
+*/filesys/bochsout.txt
 
-*/src/vm/build
-*/src/vm/bochsrc.txt
-*/src/vm/bochsout.txt
+*/vm/build
+*/vm/boch.txt
+*/vm/bochsout.txt
 
-*/src/threads/build
-*/src/threads/bochsrc.txt
-*/src/threads/bochsout.txt
+*/threads/build
+*/threads/bochsrc.txt
+*/threads/bochsout.txt
 
-*/src/utils/setitimer-helper
-*/src/utils/squish-pty
-*/src/utils/squish-unix
+*/utils/setitimer-helper
+*/utils/squish-pty
+*/utils/squish-unix
 
-*/src/tests/userprog/lib/user/*.d
-*/src/tests/userprog/lib/*.d*.hex
+*/tests/userprog/lib/user/*.d
+*/tests/userprog/lib/*.d*.hex
