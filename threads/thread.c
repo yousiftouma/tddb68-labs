@@ -171,17 +171,6 @@ thread_print_stats (void)
           idle_ticks, kernel_ticks, user_ticks);
 }
 
-tid_t thread_create_with_parent(const char *name, int priority, 
-                thread_func *function, void *aux, struct child_status *parent) {
-  tid_t tid = thread_create(name, priority, function, aux);
-  if (tid != TID_ERROR) {
-    struct thread *t = get_thread(tid);
-     t->parent = parent; // Set pointer to shared meta data
-    return tid;
-  }
-  return TID_ERROR;
-}
-
 /*
   Returns the thread with the given tid, returns NULL if no match is found
 */
