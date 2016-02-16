@@ -21,6 +21,12 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+struct new_child
+{
+  char *fn_copy;
+  struct child_status *new_cs;
+};
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -38,20 +44,40 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  // Init a new child_status shared struct
+  struct child_status* new_child = malloc(sizeof(struct child_status));
+  sema_init(&new_child->parent_awake, 0);
+  new_child->ref_cnt = 2;
+  new_child->exit_code = 0;
+  list_push_back(&thread_current()->children_list, &new_child->elem);
+
+  struct new_child *child;
+  child->fn_copy = fn_copy;
+  child->new_cs = new_child;
+
+  /* Create a new thread to execute FILE_NAME. */
+  thread_create (file_name, PRI_DEFAULT, start_process, child);
+  sema_down(&new_child->parent_awake); // Wait for child process to wake us
+
+  tid = new_child->child_tid;
+
+  // Child failed for some reason, free memory and remove child
+  if (tid == TID_ERROR) {
+    palloc_free_page (fn_copy);
+    list_remove(&new_child->elem);
+    free(new_child);
+  }
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *child_)
 {
-  char *file_name = file_name_;
+  struct new_child *child = child_;
+  char *file_name = child->fn_copy;
   struct intr_frame if_;
   bool success;
 
@@ -62,12 +88,20 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  sema_up(thread_current()->parent->parent_awake); // Wake parent
+  // Setup child side of the shared child_status struct
+  thread_current()->my_status = child->new_cs;
+  thread_current()->my_status->child_tid = thread_current()->tid;
+
+  // If load failed, replace tid with TID_ERROR
+  if (!success)
+    thread_current()->my_status->child_tid = TID_ERROR;
+  sema_up(&child->new_cs->parent_awake); // Wake parent
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
