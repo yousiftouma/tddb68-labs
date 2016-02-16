@@ -89,6 +89,7 @@ struct child_status {
   int ref_cnt;
   tid_t child_tid;
   struct semaphore parent_awake;
+  struct lock lock;
   struct list_elem elem;
 };
 

@@ -190,6 +190,38 @@ pid_t syscall_exec(void* arg_ptr) {
 }
 
 void syscall_exit(void* arg_ptr) {
+
+  int exit_code = ((int*) arg_ptr)[1];
+
+  struct child_status* my_status = thread_current()->my_status;
+  // If we are a child
+  if (my_status != NULL) {
+    lock_acquire(&my_status->lock);
+    my_status->ref_cnt--;
+    my_status->exit_code = exit_code;
+    lock_release(&my_status->lock);
+    if (my_status->ref_cnt == 0) {
+      free(my_status); // Parent is dead
+    }
+  }
+
+  struct list* children = &thread_current()->children_list;
+  struct list_elem *e;
+
+  e = list_begin(children);
+  while (e != list_end(children)) {
+    struct child_status* cs = list_entry(e, struct child_status, elem);
+
+    lock_acquire(&cs->lock);
+    cs->ref_cnt--;
+    lock_release(&cs->lock);
+
+    e = list_remove(cs);
+    // Child is dead
+    if (cs->ref_cnt == 0) {
+      free(cs);
+    }
+  }
   thread_exit(); // Kill thread and free resources
 }
 

@@ -50,6 +50,7 @@ process_execute (const char *file_name)
   sema_init(&new_child->parent_awake, 0);
   new_child->ref_cnt = 2;
   new_child->exit_code = 0;
+  lock_init(&new_child->lock);
   list_push_back(&thread_current()->children_list, &new_child->elem);
 
   struct new_child *child;
