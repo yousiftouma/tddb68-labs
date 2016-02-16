@@ -20,49 +20,49 @@ syscall_init (void)
   Creates a new file with a specified name and size, returns true if successful,
   else false
 */
-    bool syscall_create(void* arg_ptr);
+  bool syscall_create(void* arg_ptr);
 
 /*
   Opens the file with the given name, and returns a file descriptor (fd),
   returns fd = -1 if no file with that name exists or if the user program
   has too many files opened allready
 */
-  int syscall_open(void* arg_ptr);
+int syscall_open(void* arg_ptr);
 
 /*
   Closes the file with the given name if opened
 */
-  void syscall_close(void* arg_ptr);
+void syscall_close(void* arg_ptr);
 
-  /*
-    Writes size bytes from the buffer to the open file with the given fd,
-    if the fd = 1 then the buffer is written to the console. Returns the number
-    of bytes sucessfully written
-  */
-  int syscall_write(void* arg_ptr);
+/*
+  Writes size bytes from the buffer to the open file with the given fd,
+  if the fd = 1 then the buffer is written to the console. Returns the number
+  of bytes sucessfully written
+*/
+int syscall_write(void* arg_ptr);
 
-  /*
-    Reads size bytes from the file with the given fd, if fd = STIN_FILENO then
-    we read from console instead. Returns the number of bytes actually read.
-  */
-  int syscall_read(void* arg_ptr);
+/*
+  Reads size bytes from the file with the given fd, if fd = STIN_FILENO then
+  we read from console instead. Returns the number of bytes actually read.
+*/
+int syscall_read(void* arg_ptr);
 
-  /*
-    Creates a new child process executing the given command, with arguments.
-    Return the process id (pid_t) of the child_process, -1 if not sucessful
-  */
-  pid_t syscall_exec(void* arg_ptr);
+/*
+  Creates a new child process executing the given command, with arguments.
+  Return the process id (pid_t) of the child_process, -1 if not sucessful
+*/
+pid_t syscall_exec(void* arg_ptr);
 
 /*
   Kills the userprogram by killing the thread and thereby realesing all allocated
   resources and closes all open files
 */
-  void syscall_exit(void* arg_ptr);
+void syscall_exit(void* arg_ptr);
 
 /*
   Halts the system and power down the system
 */
-  void syscall_halt(void);
+void syscall_halt(void);
 
 
 static void syscall_handler (struct intr_frame *f UNUSED) {
