@@ -34,24 +34,30 @@ syscall_init (void)
 */
   void syscall_close(void* arg_ptr);
 
-/*
-  Writes size bytes from the buffer to the open file with the given fd,
-  if the fd = 1 then the buffer is written to the console. Returns the number
-  of bytes sucessfully written
-*/
-int syscall_write(void* arg_ptr);
+  /*
+    Writes size bytes from the buffer to the open file with the given fd,
+    if the fd = 1 then the buffer is written to the console. Returns the number
+    of bytes sucessfully written
+  */
+  int syscall_write(void* arg_ptr);
 
-/*
-  Reads size bytes from the file with the given fd, if fd = STIN_FILENO then
-  we read from console instead. Returns the number of bytes actually read.
-*/
+  /*
+    Reads size bytes from the file with the given fd, if fd = STIN_FILENO then
+    we read from console instead. Returns the number of bytes actually read.
+  */
   int syscall_read(void* arg_ptr);
+
+  /*
+    Creates a new child process executing the given command, with arguments.
+    Return the process id (pid_t) of the child_process, -1 if not sucessful
+  */
+  pid_t syscall_exec(void* arg_ptr);
 
 /*
   Kills the userprogram by killing the thread and thereby realesing all allocated
   resources and closes all open files
 */
-  void syscall_exit(void);
+  void syscall_exit(void* arg_ptr);
 
 /*
   Halts the system and power down the system
@@ -89,8 +95,12 @@ static void syscall_handler (struct intr_frame *f UNUSED) {
         syscall_close(arg_ptr);
         break;
 
+      case SYS_EXEC:
+        syscall_exec(arg_ptr);
+        break;
+
       case SYS_EXIT:
-        syscall_exit();
+        syscall_exit(arg_ptr);
         break;
 
       default:
@@ -174,7 +184,12 @@ int syscall_read(void* arg_ptr) {
   return bytes_read;
 }
 
-void syscall_exit() {
+pid_t syscall_exec(void* arg_ptr) {
+  char* cmd = ((char**)arg_ptr)[1];
+  return (pid_t) process_execute(cmd);
+}
+
+void syscall_exit(void* arg_ptr) {
   thread_exit(); // Kill thread and free resources
 }
 
