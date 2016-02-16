@@ -54,6 +54,13 @@ int syscall_read(void* arg_ptr);
 pid_t syscall_exec(void* arg_ptr);
 
 /*
+  Sleeps the calling thread until the child process with the given pid exits,
+  or returns immidiatly if the child has already exited. Return -1 if no child
+  process has the given pid
+*/
+int syscall_wait(void* arg_ptr);
+
+/*
   Kills the userprogram by killing the thread and thereby realesing all allocated
   resources and closes all open files
 */
@@ -96,7 +103,11 @@ static void syscall_handler (struct intr_frame *f UNUSED) {
         break;
 
       case SYS_EXEC:
-        syscall_exec(arg_ptr);
+        f->eax = syscall_exec(arg_ptr);
+        break;
+
+      case SYS_WAIT:
+        f->eax = syscall_wait(arg_ptr);
         break;
 
       case SYS_EXIT:
@@ -192,37 +203,37 @@ pid_t syscall_exec(void* arg_ptr) {
 void syscall_exit(void* arg_ptr) {
 
   int exit_code = ((int*) arg_ptr)[1];
-
   struct child_status* my_status = thread_current()->my_status;
-  // If we are a child
+  // Set exit code
   if (my_status != NULL) {
     lock_acquire(&my_status->lock);
-    my_status->ref_cnt--;
     my_status->exit_code = exit_code;
     lock_release(&my_status->lock);
-    if (my_status->ref_cnt == 0) {
-      free(my_status); // Parent is dead
-    }
   }
+  thread_exit(); // Kill thread and free resources
+}
+
+int syscall_wait(void* arg_ptr) {
+  
+  int child_exit_code = -1;
+  pid_t child_pid = ((pid_t*) arg_ptr)[1];
 
   struct list* children = &thread_current()->children_list;
   struct list_elem *e;
 
-  e = list_begin(children);
-  while (e != list_end(children)) {
+  for (e = list_begin(children); e != list_end(children);
+        e = list_next(e)) {
     struct child_status* cs = list_entry(e, struct child_status, elem);
 
-    lock_acquire(&cs->lock);
-    cs->ref_cnt--;
-    lock_release(&cs->lock);
-
-    e = list_remove(cs);
-    // Child is dead
-    if (cs->ref_cnt == 0) {
+    if (cs->child_tid == child_pid) {
+      sema_down(&cs->parent_awake);
+      child_exit_code = cs->exit_code;
+      list_remove(e);
       free(cs);
+      break; 
     }
   }
-  thread_exit(); // Kill thread and free resources
+  return child_exit_code;
 }
 
 void syscall_halt() {

@@ -332,6 +332,37 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
+  struct child_status* my_status = thread_current()->my_status;
+  // If we are a child
+  if (my_status != NULL) {
+    lock_acquire(&my_status->lock);
+    my_status->ref_cnt--;
+    sema_up(&my_status->parent_awake);
+    lock_release(&my_status->lock);
+    if (my_status->ref_cnt == 0) {
+      free(my_status); // Parent is dead
+    }
+  }
+
+  // Free any dead children
+  struct list* children = &thread_current()->children_list;
+  struct list_elem *e;
+
+  e = list_begin(children);
+  while (e != list_end(children)) {
+    struct child_status* cs = list_entry(e, struct child_status, elem);
+
+    lock_acquire(&cs->lock);
+    cs->ref_cnt--;
+    lock_release(&cs->lock);
+
+    e = list_remove(cs);
+    // Child is dead
+    if (cs->ref_cnt == 0) {
+      free(cs);
+    }
+  }
+
 #ifdef USERPROG
   // Close all files
   if (thread_current()->open_files != NULL && thread_current()->file_ids != NULL) {
