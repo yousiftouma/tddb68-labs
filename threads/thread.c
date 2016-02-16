@@ -246,17 +246,11 @@ thread_create (const char *name, int priority,
 
   list_push_back(&thread_list, &t->thread_list_elem);
 
+  list_init(&t->children_list);
+  t->my_status = NULL;
+
   /* Add to run queue. */
   thread_unblock (t);
-  
-  //enum intr_level old_level = intr_disable ();  
-
-  struct child_status *parent = malloc(sizeof(struct child_status));
-  t->parent = parent;
-  sema_init(&parent->parent_awake, 0);
-  sema_down(&parent->parent_awake); // Wait for child to wake us
-  //intr_set_level (old_level);
-
   return tid;
 }
 
@@ -349,7 +343,8 @@ thread_exit (void)
     }
     bitmap_destroy(thread_current()->file_ids); // Release bitmap
   }
-  list_remove(&thread_list, &t->thread_list_elem);
+  list_remove(&thread_current()->thread_list_elem);
+
   process_exit ();
 #endif
 

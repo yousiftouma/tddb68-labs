@@ -87,11 +87,8 @@ typedef int tid_t;
 struct child_status {
   int exit_code;
   int ref_cnt;
+  tid_t child_tid;
   struct semaphore parent_awake;
-};
-
-struct children {
-  struct child_status *child;
   struct list_elem elem;
 };
 
@@ -103,8 +100,8 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    struct children t_children;         /* List of children */
-    struct child_status *parent;       /* Shared meta data struct with parent */
+    struct list children_list;          /* List of children */
+    struct child_status *my_status;     /* Shared meta data struct with parent */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
