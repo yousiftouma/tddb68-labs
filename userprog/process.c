@@ -27,6 +27,101 @@ struct new_child
   struct child_status *new_cs;
 };
 
+struct program_args {
+  char* program_name;
+  char* argv[32];
+  int argc;
+};
+
+/*
+  Parses the given input and returns a program_args struct containing the
+  program name (i.e filename), the argument vector and the argument count 
+  (including the filename)
+*/
+static struct program_args parse_arguments(char* input) {
+  
+  struct program_args args;
+  args.argc = 0;
+
+  char* token, *save_ptr;
+  const char delim[] = " ";
+
+  for (token = strtok_r(input, delim, &save_ptr);
+        token != NULL;
+        token = strtok_r(NULL, delim, &save_ptr)) {
+      args.argv[args.argc] = token;
+      printf("Parsed argument %d, %s \n", args.argc, token);
+      args.argc++;
+  }
+  return args;
+}
+
+void** setup_arg_stack(struct program_args args, void** esp) {
+  
+  char** argv_ptrs[args.argc];
+  int i;
+
+  char* stack_pointer = *esp;
+
+  for (i = args.argc - 1; i >= 0; i--) {
+    stack_pointer -= strlen(args.argv[i]) + 1;
+    printf("String size was: %d \n", strlen(args.argv[i]));
+    *stack_pointer = args.argv[i];
+    printf("Placed: %s at: %p \n", args.argv[i], stack_pointer);
+    argv_ptrs[i] = stack_pointer; // Save pointer to this arg
+  }
+
+  printf("SP before WA now: %p \n", stack_pointer);
+
+  unsigned int stack_addr = stack_pointer;
+  if (stack_addr % 4 != 0) {
+    stack_pointer -= stack_addr % 4;
+  }
+
+  printf("SP after WA is: %p \n", stack_pointer);
+
+  stack_pointer -= sizeof(char*);
+  *stack_pointer = (char*)0;
+
+  printf("SP after null sentinel is: %p \n", stack_pointer);
+
+  // Convert stack_pointer to char**
+  char** argv_stack_pointer = (char**) stack_pointer;
+
+  int j;
+  for (j = args.argc - 1; j >= 0; j--) {
+    argv_stack_pointer--;
+    *argv_stack_pointer = argv_ptrs[j];
+    printf("Placed argv[%d] at %p to point to: %p \n", j, argv_stack_pointer, argv_ptrs[j]);
+  }
+  // Argv
+  char** argv_zero = argv_stack_pointer;
+
+  argv_stack_pointer--;
+  *argv_stack_pointer = argv_zero;
+
+  printf("Placed argv at %p to point to: %p \n", argv_stack_pointer, *argv_stack_pointer);
+  stack_pointer = (char*) argv_stack_pointer;
+  stack_pointer -= sizeof(int);
+
+
+  int* int_stack_pointer = (int)stack_pointer;
+  *int_stack_pointer = args.argc;
+
+  printf("Placed argc at %p with value: %d \n", int_stack_pointer, args.argc);
+
+
+  // Something is wrong with the following lines, probably causing the
+  // errors
+
+  void** void_stack_pointer = (void**) int_stack_pointer;
+  void_stack_pointer -= sizeof(void*);
+  *void_stack_pointer = (void*)0;
+
+  return void_stack_pointer;
+}
+
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -44,16 +139,16 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-
   // Init a new child_status shared struct
   struct child_status* new_child = malloc(sizeof(struct child_status));
   sema_init(&new_child->parent_awake, 0);
   new_child->ref_cnt = 2;
   new_child->exit_code = -1;
   lock_init(&new_child->lock);
+  
   list_push_back(&thread_current()->children_list, &new_child->elem);
 
-  struct new_child *child;
+  struct new_child *child = malloc(sizeof(struct new_child));
   child->fn_copy = fn_copy;
   child->new_cs = new_child;
 
@@ -69,6 +164,7 @@ process_execute (const char *file_name)
     list_remove(&new_child->elem);
     free(new_child);
   }
+  free(child);
   return tid;
 }
 
@@ -268,7 +364,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
    /* Uncomment the following line to print some debug
      information. This will be useful when you debug the program
      stack.*/
-/*#define STACK_DEBUG*/
+#define STACK_DEBUG
+
+  struct program_args args = parse_arguments((char*)file_name);
+  esp = setup_arg_stack(args, esp);
 
 #ifdef STACK_DEBUG
   printf("*esp is %p\nstack contents:\n", *esp);
@@ -303,6 +402,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
 #endif
 
+
+  file_name = args.program_name;
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -515,7 +616,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
