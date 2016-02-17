@@ -28,10 +28,6 @@ static struct list ready_list;
 sleep time has passed */
 static struct list sleep_list;
 
-/* List of all living processes, processes are added as they are initialized
-and removed when destroyed */
-static struct list thread_list;
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -96,7 +92,6 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init(&sleep_list);
-  list_init(&thread_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -171,21 +166,6 @@ thread_print_stats (void)
           idle_ticks, kernel_ticks, user_ticks);
 }
 
-/*
-  Returns the thread with the given tid, returns NULL if no match is found
-*/
-struct thread* get_thread(tid_t tid) {
-  struct list_elem *e;
-  for (e = list_begin(&thread_list); e != list_end(&thread_list);
-       e = list_next(e)) {
-      struct thread *t = list_entry(e, struct thread, thread_list_elem);
-      if (t->tid == tid) {
-        return t;
-      }
-  }
-  return NULL;
-}
-
 /* Creates a new kernel thread named NAME with the given initial
    PRIORITY, which executes FUNCTION passing AUX as the argument,
    and adds it to the ready queue.  Returns the thread identifier
@@ -243,11 +223,6 @@ thread_create (const char *name, int priority,
   bitmap_mark(t->file_ids, 0);
   bitmap_mark(t->file_ids, 1);
   #endif
-
-  list_push_back(&thread_list, &t->thread_list_elem);
-
-  list_init(&t->children_list);
-  t->my_status = NULL;
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -334,6 +309,8 @@ thread_exit (void)
 
   struct child_status* my_status = thread_current()->my_status;
   // If we are a child
+
+  printf("%s: exit(%d)\n", thread_current()->name, my_status->exit_code);
   if (my_status != NULL) {
     lock_acquire(&my_status->lock);
     my_status->ref_cnt--;
@@ -355,8 +332,7 @@ thread_exit (void)
     lock_acquire(&cs->lock);
     cs->ref_cnt--;
     lock_release(&cs->lock);
-
-    e = list_remove(cs);
+    e = list_remove(e);
     // Child is dead
     if (cs->ref_cnt == 0) {
       free(cs);
@@ -374,8 +350,6 @@ thread_exit (void)
     }
     bitmap_destroy(thread_current()->file_ids); // Release bitmap
   }
-  list_remove(&thread_current()->thread_list_elem);
-
   process_exit ();
 #endif
 
@@ -535,6 +509,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  list_init(&t->children_list);
+  t->my_status = NULL;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
