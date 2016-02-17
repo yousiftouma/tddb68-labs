@@ -107,11 +107,7 @@ timer_sleep (int64_t ticks)
   t->wake_ticks = start + ticks;
 
   struct list* sleep_list = get_sleep_list();
-  if (list_empty(sleep_list)) {
-    list_push_back(sleep_list, &t->elem);
-  } else {
-    list_insert_ordered(sleep_list, &(t->elem), &thread_sleep_comp_func, NULL);
-  }
+  list_insert_ordered(sleep_list, &(t->elem), &thread_sleep_comp_func, NULL);
 
   thread_block(); // Go to sleep, wait for OS to wake us
   free(t);
