@@ -50,9 +50,10 @@ static struct program_args parse_arguments(char* input) {
         token != NULL;
         token = strtok_r(NULL, delim, &save_ptr)) {
       args.argv[args.argc] = token;
-      printf("Parsed argument %d, %s \n", args.argc, token);
+      //printf("Parsed argument %d, %s \n", args.argc, token);
       args.argc++;
   }
+  args.program_name = args.argv[0];
   return args;
 }
 
@@ -64,9 +65,10 @@ void** setup_arg_stack(struct program_args args, void** esp) {
   char* stack_pointer = *esp;
 
   for (i = args.argc - 1; i >= 0; i--) {
-    stack_pointer -= strlen(args.argv[i]) + 1;
+    int str_len = strlen(args.argv[i]) + 1;
+    stack_pointer -= str_len;
     printf("String size was: %d \n", strlen(args.argv[i]));
-    *stack_pointer = args.argv[i];
+    strlcpy(stack_pointer, args.argv[i], str_len);
     printf("Placed: %s at: %p \n", args.argv[i], stack_pointer);
     argv_ptrs[i] = stack_pointer; // Save pointer to this arg
   }
@@ -110,15 +112,12 @@ void** setup_arg_stack(struct program_args args, void** esp) {
 
   printf("Placed argc at %p with value: %d \n", int_stack_pointer, args.argc);
 
-
-  // Something is wrong with the following lines, probably causing the
-  // errors
-
   void** void_stack_pointer = (void**) int_stack_pointer;
-  void_stack_pointer -= sizeof(void*);
-  *void_stack_pointer = (void*)0;
+  void_stack_pointer--;
+  *esp = void_stack_pointer;
 
-  return void_stack_pointer;
+  printf("Placed null pointer at %p, pointing at %p \n", void_stack_pointer, *void_stack_pointer);
+  //return esp;
 }
 
 
@@ -367,7 +366,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 #define STACK_DEBUG
 
   struct program_args args = parse_arguments((char*)file_name);
-  esp = setup_arg_stack(args, esp);
+  setup_arg_stack(args, esp);
 
 #ifdef STACK_DEBUG
   printf("*esp is %p\nstack contents:\n", *esp);
