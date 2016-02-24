@@ -61,7 +61,7 @@ pid_t syscall_exec(void* arg_ptr);
 int syscall_wait(void* arg_ptr);
 
 /*
-  Kills the userprogram by killing the thread and thereby realesing all allocated
+  Kills the user program by killing the thread and thereby realesing all allocated
   resources and closes all open files
 */
 void syscall_exit(void* arg_ptr);
@@ -204,7 +204,8 @@ void syscall_exit(void* arg_ptr) {
 
   int exit_code = ((int*) arg_ptr)[1];
   struct child_status* my_status = thread_current()->my_status;
-  // Set exit code
+  
+  // I am child, set exit code
   if (my_status != NULL) {
     lock_acquire(&my_status->lock);
     my_status->exit_code = exit_code;
@@ -214,30 +215,8 @@ void syscall_exit(void* arg_ptr) {
 }
 
 int syscall_wait(void* arg_ptr) {
-  
-  int child_exit_code = -1;
   pid_t child_pid = ((pid_t*) arg_ptr)[1];
-
-  struct list* children = &thread_current()->children_list;
-  struct list_elem *e;
-
-  printf("Start looking for child pid\n");
-  for (e = list_begin(children); e != list_end(children);
-        e = list_next(e)) {
-    struct child_status* cs = list_entry(e, struct child_status, elem);
-    printf("Looking for child pi\n");
-    if (cs->child_tid == child_pid) {
-      printf("Found child pid, going to sleep \n");
-      sema_down(&cs->parent_awake);
-      printf("Child has woken us, yay!\n");
-      child_exit_code = cs->exit_code;
-      list_remove(e);
-      free(cs);
-      break; 
-    }
-  }
-  printf("Returning child exit_code \n");
-  return child_exit_code;
+  return process_wait(child_pid);
 }
 
 void syscall_halt() {

@@ -308,14 +308,14 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
   struct child_status* my_status = thread_current()->my_status;
+  
   // If we are a child
-
-  printf("%s: exit(%d)\n", thread_current()->name, my_status->exit_code);
   if (my_status != NULL) {
+    printf("%s: exit(%d)\n", thread_current()->name, my_status->exit_code);
     lock_acquire(&my_status->lock);
     my_status->ref_cnt--;
-    sema_up(&my_status->parent_awake);
     lock_release(&my_status->lock);
+    sema_up(&my_status->parent_awake);
     if (my_status->ref_cnt == 0) {
       free(my_status); // Parent is dead
     }
@@ -328,7 +328,6 @@ thread_exit (void)
   e = list_begin(children);
   while (e != list_end(children)) {
     struct child_status* cs = list_entry(e, struct child_status, elem);
-
     lock_acquire(&cs->lock);
     cs->ref_cnt--;
     lock_release(&cs->lock);

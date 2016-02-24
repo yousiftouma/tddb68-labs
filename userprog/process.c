@@ -21,12 +21,14 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+// Shared struct used to send data to child whilst in creation
 struct new_child
 {
   char *fn_copy;
   struct child_status *new_cs;
 };
 
+// Basic struct to hold parsed program arguments
 struct program_args {
   char* program_name;
   char* argv[32];
@@ -36,7 +38,7 @@ struct program_args {
 /*
   Parses the given input and returns a program_args struct containing the
   program name (i.e filename), the argument vector and the argument count 
-  (including the filename)
+  (including the file name)
 */
 static struct program_args parse_arguments(char* input) {
   
@@ -50,74 +52,63 @@ static struct program_args parse_arguments(char* input) {
         token != NULL;
         token = strtok_r(NULL, delim, &save_ptr)) {
       args.argv[args.argc] = token;
-      //printf("Parsed argument %d, %s \n", args.argc, token);
       args.argc++;
   }
   args.program_name = args.argv[0];
   return args;
 }
 
-void** setup_arg_stack(struct program_args args, void** esp) {
+/*
+  Setup the stack to Pintos calling convention by placing program arguments
+  correctly etc.
+*/
+void setup_arg_stack(struct program_args args, void** esp) {
   
   char** argv_ptrs[args.argc];
-  int i;
-
   char* stack_pointer = *esp;
 
+  // Push program args on stack
+  int i;
   for (i = args.argc - 1; i >= 0; i--) {
     int str_len = strlen(args.argv[i]) + 1;
     stack_pointer -= str_len;
-    printf("String size was: %d \n", strlen(args.argv[i]));
     strlcpy(stack_pointer, args.argv[i], str_len);
-    printf("Placed: %s at: %p \n", args.argv[i], stack_pointer);
     argv_ptrs[i] = stack_pointer; // Save pointer to this arg
   }
 
-  printf("SP before WA now: %p \n", stack_pointer);
-
+  // Word align
   unsigned int stack_addr = stack_pointer;
   if (stack_addr % 4 != 0) {
     stack_pointer -= stack_addr % 4;
   }
 
-  printf("SP after WA is: %p \n", stack_pointer);
-
+  // Null sentinel
   stack_pointer -= sizeof(char*);
   *stack_pointer = (char*)0;
 
-  printf("SP after null sentinel is: %p \n", stack_pointer);
-
-  // Convert stack_pointer to char**
   char** argv_stack_pointer = (char**) stack_pointer;
 
+  // Push argv pointers to stack, pointing actual arguments
   int j;
   for (j = args.argc - 1; j >= 0; j--) {
     argv_stack_pointer--;
     *argv_stack_pointer = argv_ptrs[j];
-    printf("Placed argv[%d] at %p to point to: %p \n", j, argv_stack_pointer, argv_ptrs[j]);
   }
-  // Argv
-  char** argv_zero = argv_stack_pointer;
 
+  char** argv_zero = argv_stack_pointer;
   argv_stack_pointer--;
   *argv_stack_pointer = argv_zero;
 
-  printf("Placed argv at %p to point to: %p \n", argv_stack_pointer, *argv_stack_pointer);
+  // Push argc
   stack_pointer = (char*) argv_stack_pointer;
   stack_pointer -= sizeof(int);
-
-
   int* int_stack_pointer = (int)stack_pointer;
   *int_stack_pointer = args.argc;
 
-  printf("Placed argc at %p with value: %d \n", int_stack_pointer, args.argc);
-
+  // Push null void return pointer
   void** void_stack_pointer = (void**) int_stack_pointer;
   void_stack_pointer--;
   *esp = void_stack_pointer;
-
-  printf("Placed null pointer at %p, pointing at %p \n", void_stack_pointer, *void_stack_pointer);
-  //return esp;
 }
 
 
@@ -151,8 +142,14 @@ process_execute (const char *file_name)
   child->fn_copy = fn_copy;
   child->new_cs = new_child;
 
+  // Parse file name (i.e name of executable) to set correct thread name
+  char* save_ptr;
+  char file_name_copy[strlen(file_name)];
+  strlcpy(file_name_copy, file_name, strlen(file_name) + 1);
+  char* exec_name = strtok_r(file_name_copy, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  thread_create (file_name, PRI_DEFAULT, start_process, child);
+  thread_create (exec_name, PRI_DEFAULT, start_process, child);
   sema_down(&new_child->parent_awake); // Wait for child process to wake us
 
   tid = new_child->child_tid;
@@ -219,10 +216,30 @@ start_process (void *child_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while (true);
-  return -1;
+
+  int child_exit_code = -1;
+  struct list* children = &thread_current()->children_list;
+  struct list_elem *e;
+
+  //printf("Start looking for child pid\n");
+  for (e = list_begin(children); e != list_end(children);
+        e = list_next(e)) {
+    struct child_status* cs = list_entry(e, struct child_status, elem);
+    //printf("Looking for child pi\n");
+    if (cs->child_tid == child_tid) {
+      //printf("Found child pid, going to sleep \n");
+      sema_down(&cs->parent_awake);
+      //printf("Child has woken us, yay!\n");
+      child_exit_code = cs->exit_code;
+      list_remove(e);
+      free(cs);
+      break; 
+    }
+  }
+  //printf("Returning child exit_code \n");
+  return child_exit_code;
 }
 
 /* Free the current process's resources. */
@@ -363,7 +380,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
    /* Uncomment the following line to print some debug
      information. This will be useful when you debug the program
      stack.*/
-#define STACK_DEBUG
+//#define STACK_DEBUG
 
   struct program_args args = parse_arguments((char*)file_name);
   setup_arg_stack(args, esp);
@@ -400,7 +417,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
     i++;
   }
 #endif
-
 
   file_name = args.program_name;
   /* Open executable file. */
