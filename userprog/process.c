@@ -223,22 +223,17 @@ process_wait (tid_t child_tid)
   struct list* children = &thread_current()->children_list;
   struct list_elem *e;
 
-  //printf("Start looking for child pid\n");
   for (e = list_begin(children); e != list_end(children);
         e = list_next(e)) {
     struct child_status* cs = list_entry(e, struct child_status, elem);
-    //printf("Looking for child pi\n");
     if (cs->child_tid == child_tid) {
-      //printf("Found child pid, going to sleep \n");
       sema_down(&cs->parent_awake);
-      //printf("Child has woken us, yay!\n");
       child_exit_code = cs->exit_code;
       list_remove(e);
       free(cs);
       break; 
     }
   }
-  //printf("Returning child exit_code \n");
   return child_exit_code;
 }
 
