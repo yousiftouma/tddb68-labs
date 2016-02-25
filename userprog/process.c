@@ -17,9 +17,12 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static struct program_args parse_arguments(char* input);
+void setup_arg_stack(struct program_args args, void** esp);
 
 // Shared struct used to send data to child whilst in creation
 struct new_child
@@ -64,7 +67,7 @@ static struct program_args parse_arguments(char* input) {
 */
 void setup_arg_stack(struct program_args args, void** esp) {
   
-  char** argv_ptrs[args.argc];
+  char* argv_ptrs[args.argc];
   char* stack_pointer = *esp;
 
   // Push program args on stack
@@ -77,16 +80,17 @@ void setup_arg_stack(struct program_args args, void** esp) {
   }
 
   // Word align
-  unsigned int stack_addr = stack_pointer;
+  unsigned int stack_addr = (unsigned int) stack_pointer;
   if (stack_addr % 4 != 0) {
     stack_pointer -= stack_addr % 4;
   }
 
   // Null sentinel
-  stack_pointer -= sizeof(char*);
-  *stack_pointer = (char*)0;
-
   char** argv_stack_pointer = (char**) stack_pointer;
+
+  argv_stack_pointer--;
+  *argv_stack_pointer = (char*)0;
+
 
   // Push argv pointers to stack, pointing actual arguments
   int j;
@@ -94,7 +98,6 @@ void setup_arg_stack(struct program_args args, void** esp) {
     argv_stack_pointer--;
     *argv_stack_pointer = argv_ptrs[j];
   }
-
   char** argv_zero = argv_stack_pointer;
   argv_stack_pointer--;
   *argv_stack_pointer = argv_zero;
@@ -102,7 +105,7 @@ void setup_arg_stack(struct program_args args, void** esp) {
   // Push argc
   stack_pointer = (char*) argv_stack_pointer;
   stack_pointer -= sizeof(int);
-  int* int_stack_pointer = (int)stack_pointer;
+  int* int_stack_pointer = (int*)stack_pointer;
   *int_stack_pointer = args.argc;
 
   // Push null void return pointer

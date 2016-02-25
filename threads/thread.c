@@ -11,6 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "filesys/file.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -112,7 +114,7 @@ struct list* get_sleep_list(void) {
 */
 bool thread_sleep_comp_func(const struct list_elem *a,
                             const struct list_elem *b,
-                            void *aux) {
+                            void *aux UNUSED) {
   struct sleeping_thread *t_a, *t_b;
   t_a = list_entry(a, struct sleeping_thread, elem);
   t_b = list_entry(b, struct sleeping_thread, elem);
