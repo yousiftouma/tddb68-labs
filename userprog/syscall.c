@@ -88,9 +88,7 @@ static void syscall_handler (struct intr_frame *f UNUSED) {
     if (!is_valid_ptr(arg_ptr)) {
       thread_exit();
     }
-
     int syscall_nr = *(int*)(f->esp);
-
 
     switch (syscall_nr) {	
       case SYS_HALT :
@@ -141,12 +139,17 @@ bool is_valid_ptr(void* ptr) {
 
 bool syscall_create(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
+
+  if (!is_valid_ptr(file_name) || !is_valid_ptr(&((char**)arg_ptr)[1])) thread_exit();
+
   int file_size = ((int*)arg_ptr)[2];
   return filesys_create(file_name, file_size);
 }
 
 int syscall_open(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
+  if (!is_valid_ptr(file_name)  || !is_valid_ptr(&((char**)arg_ptr)[1])) thread_exit();
+
   struct file *new_open = filesys_open(file_name);
 
   // Check sucessful open
@@ -162,10 +165,11 @@ int syscall_open(void* arg_ptr) {
 
 void syscall_close(void* arg_ptr) {
   int fd = ((int*)arg_ptr)[1];
+  if (!is_valid_ptr(&((int*)arg_ptr)[1])) thread_exit();
   if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
     file_close(thread_current()->open_files[fd]);
+    bitmap_set(thread_current()->file_ids, fd, 0);
   }
-  bitmap_set(thread_current()->file_ids, fd, 0);
 }
 
 int syscall_write(void* arg_ptr) {
@@ -174,6 +178,8 @@ int syscall_write(void* arg_ptr) {
   int fd = ((int*)arg_ptr)[1];
   void *buf = ((void**)arg_ptr)[2];
   int size = ((int*)arg_ptr)[3];
+
+  if (!is_valid_ptr(buf) || !is_valid_ptr(&((int*)arg_ptr)[3])) thread_exit();
 
   // Write to console
   if (fd == STDOUT_FILENO) {
@@ -194,6 +200,9 @@ int syscall_read(void* arg_ptr) {
   int fd = ((int*)arg_ptr)[1];
   void *buf = ((void**)arg_ptr)[2];
   int size = ((int*)arg_ptr)[3];
+
+  // Check that the last argument is not above the stack and valid
+  if (!is_valid_ptr(buf) || !is_valid_ptr(&((int*)arg_ptr)[3])) thread_exit();
 
   int bytes_read = -1;
 
@@ -217,11 +226,15 @@ int syscall_read(void* arg_ptr) {
 
 pid_t syscall_exec(void* arg_ptr) {
   char* cmd = ((char**)arg_ptr)[1];
+
+  if (!is_valid_ptr(cmd) || !is_valid_ptr(&((char**)arg_ptr)[1])) thread_exit();
   return (pid_t) process_execute(cmd);
 }
 
 void syscall_exit(void* arg_ptr) {
 
+  // Check that the last argument is not above the stack
+  if (!is_valid_ptr(&((int*)arg_ptr)[1])) thread_exit();
   int exit_code = ((int*) arg_ptr)[1];
   struct child_status* my_status = thread_current()->my_status;
   

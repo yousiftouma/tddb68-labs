@@ -159,7 +159,6 @@ process_execute (const char *file_name)
 
   // Child failed for some reason, free memory and remove child
   if (tid == TID_ERROR) {
-    palloc_free_page (fn_copy);
     list_remove(&new_child->elem);
     free(new_child);
   }
