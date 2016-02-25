@@ -80,6 +80,12 @@ void syscall_halt(void);
 */
 bool is_valid_ptr(void* ptr);
 
+/*
+  Increments ptr until we find a null terminator char. Returns false if we step 
+  into an invalid during this process, otherwise returns true
+*/
+bool is_valid_bytes(char* ptr);
+
 static void syscall_handler (struct intr_frame *f UNUSED) {
 
     void* arg_ptr = (f->esp);
@@ -137,18 +143,39 @@ bool is_valid_ptr(void* ptr) {
       && pagedir_get_page(thread_current()->pagedir, ptr) != NULL;
 }
 
+bool is_valid_bytes(char* ptr) {
+  char current_byte;
+  do {
+    current_byte = *ptr;
+    if (!is_valid_ptr(ptr)) {
+      return false;
+    }
+    ptr++;
+  } while(current_byte != '\0');
+  return true;
+}
+
 bool syscall_create(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
-
-  if (!is_valid_ptr(file_name) || !is_valid_ptr(&((char**)arg_ptr)[1])) thread_exit();
-
   int file_size = ((int*)arg_ptr)[2];
+
+  if (!is_valid_ptr(file_name) 
+    || !is_valid_ptr(&((int*)arg_ptr)[2])
+    || !is_valid_bytes(file_name)) {
+    thread_exit();
+  }
+    
+
   return filesys_create(file_name, file_size);
 }
 
 int syscall_open(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
-  if (!is_valid_ptr(file_name)  || !is_valid_ptr(&((char**)arg_ptr)[1])) thread_exit();
+  if (!is_valid_ptr(file_name) 
+    || !is_valid_ptr(&((char**)arg_ptr)[1])
+    || !is_valid_bytes(file_name)) {
+  thread_exit();  
+  }
 
   struct file *new_open = filesys_open(file_name);
 
@@ -179,8 +206,11 @@ int syscall_write(void* arg_ptr) {
   void *buf = ((void**)arg_ptr)[2];
   int size = ((int*)arg_ptr)[3];
 
-  if (!is_valid_ptr(buf) || !is_valid_ptr(&((int*)arg_ptr)[3])) thread_exit();
-
+  if (!is_valid_ptr(buf) 
+    || !is_valid_ptr(&((int*)arg_ptr)[3])
+    || !is_valid_bytes(buf)) {
+    thread_exit();
+  }
   // Write to console
   if (fd == STDOUT_FILENO) {
     const char* char_buf = (char*)buf;
@@ -202,8 +232,10 @@ int syscall_read(void* arg_ptr) {
   int size = ((int*)arg_ptr)[3];
 
   // Check that the last argument is not above the stack and valid
-  if (!is_valid_ptr(buf) || !is_valid_ptr(&((int*)arg_ptr)[3])) thread_exit();
-
+  if (!is_valid_ptr(buf) 
+    || !is_valid_ptr(&((int*)arg_ptr)[3])) {
+    thread_exit();
+  }
   int bytes_read = -1;
 
   // Read from console if STDIN_FILENO
@@ -227,7 +259,11 @@ int syscall_read(void* arg_ptr) {
 pid_t syscall_exec(void* arg_ptr) {
   char* cmd = ((char**)arg_ptr)[1];
 
-  if (!is_valid_ptr(cmd) || !is_valid_ptr(&((char**)arg_ptr)[1])) thread_exit();
+  if (!is_valid_ptr(cmd) 
+    || !is_valid_ptr(&((char**)arg_ptr)[1])
+    || !is_valid_bytes(cmd)) {
+    thread_exit();
+  }
   return (pid_t) process_execute(cmd);
 }
 
