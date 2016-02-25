@@ -7,6 +7,9 @@
 #include "filesys/file.h"
 #include "threads/init.h"
 #include "devices/input.h"
+#include "threads/vaddr.h"
+#include "userprog/process.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -71,10 +74,22 @@ void syscall_exit(void* arg_ptr);
 */
 void syscall_halt(void);
 
+/*
+  Returns true if the given pointer is pointing to user space and the location
+  is within a allocated page for the user process
+*/
+bool is_valid_ptr(void* ptr);
 
 static void syscall_handler (struct intr_frame *f UNUSED) {
-    int syscall_nr = *(int*)(f->esp);
+
     void* arg_ptr = (f->esp);
+
+    // Check that the stack pointer is valid
+    if (!is_valid_ptr(arg_ptr)) {
+      thread_exit();
+    }
+
+    int syscall_nr = *(int*)(f->esp);
 
 
     switch (syscall_nr) {	
@@ -119,6 +134,11 @@ static void syscall_handler (struct intr_frame *f UNUSED) {
     }
 }
 
+bool is_valid_ptr(void* ptr) {
+  return is_user_vaddr(ptr) 
+      && pagedir_get_page(thread_current()->pagedir, ptr) != NULL;
+}
+
 bool syscall_create(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
   int file_size = ((int*)arg_ptr)[2];
@@ -131,7 +151,7 @@ int syscall_open(void* arg_ptr) {
 
   // Check sucessful open
   if (new_open != NULL) {
-    int fnd = bitmap_scan_and_flip(thread_current()->file_ids, 0, 1, 0);
+    unsigned int fnd = bitmap_scan_and_flip(thread_current()->file_ids, 0, 1, 0);
     if (fnd != BITMAP_ERROR) { // Not enough space
       thread_current()->open_files[fnd] = new_open;
       return fnd;
