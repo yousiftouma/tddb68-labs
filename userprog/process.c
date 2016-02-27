@@ -100,7 +100,7 @@ void setup_arg_stack(struct program_args args, void** esp) {
   }
   char** argv_zero = argv_stack_pointer;
   argv_stack_pointer--;
-  *argv_stack_pointer = argv_zero;
+  *argv_stack_pointer = (char*)argv_zero;
 
   // Push argc
   stack_pointer = (char*) argv_stack_pointer;
@@ -188,8 +188,10 @@ start_process (void *child_)
   thread_current()->my_status->child_tid = thread_current()->tid;
 
   // If load failed, replace tid with TID_ERROR
-  if (!success)
+  if (!success) {
     thread_current()->my_status->child_tid = TID_ERROR;
+    thread_current()->my_status = NULL;
+  }
   sema_up(&child->new_cs->parent_awake); // Wake parent
 
   /* If load failed, quit. */

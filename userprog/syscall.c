@@ -81,6 +81,11 @@ void syscall_halt(void);
 bool is_valid_ptr(void* ptr);
 
 /*
+  Checks that the given buffer is valid by steping through the bytes
+*/
+bool is_valid_buffer(void* buf, unsigned int size);
+
+/*
   Increments ptr until we find a null terminator char. Returns false if we step 
   into an invalid during this process, otherwise returns true
 */
@@ -146,12 +151,23 @@ bool is_valid_ptr(void* ptr) {
 bool is_valid_bytes(char* ptr) {
   char current_byte;
   do {
-    current_byte = *ptr;
     if (!is_valid_ptr(ptr)) {
       return false;
     }
+    current_byte = *ptr;
     ptr++;
   } while(current_byte != '\0');
+  return true;
+}
+
+bool is_valid_buffer(void* buf, unsigned int size) {
+  unsigned int i;
+  for (i = 0; i < size; ++i) {
+    if (!is_valid_ptr(buf)) {
+      return false;
+    }
+    buf++;
+  }
   return true;
 }
 
@@ -208,7 +224,7 @@ int syscall_write(void* arg_ptr) {
 
   if (!is_valid_ptr(buf) 
     || !is_valid_ptr(&((int*)arg_ptr)[3])
-    || !is_valid_bytes(buf)) {
+    || !is_valid_buffer(buf, size)) {
     thread_exit();
   }
   // Write to console
@@ -233,7 +249,8 @@ int syscall_read(void* arg_ptr) {
 
   // Check that the last argument is not above the stack and valid
   if (!is_valid_ptr(buf) 
-    || !is_valid_ptr(&((int*)arg_ptr)[3])) {
+    || !is_valid_ptr(&((int*)arg_ptr)[3])
+    || !is_valid_buffer(buf, size)) {
     thread_exit();
   }
   int bytes_read = -1;
@@ -276,9 +293,7 @@ void syscall_exit(void* arg_ptr) {
   
   // I am child, set exit code
   if (my_status != NULL) {
-    lock_acquire(&my_status->lock);
     my_status->exit_code = exit_code;
-    lock_release(&my_status->lock);
   }
   thread_exit(); // Kill thread and free resources
 }
