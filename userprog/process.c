@@ -138,8 +138,6 @@ process_execute (const char *file_name)
   new_child->ref_cnt = 2;
   new_child->exit_code = -1;
   lock_init(&new_child->lock);
-  
-  list_push_back(&thread_current()->children_list, &new_child->elem);
 
   struct new_child *child = malloc(sizeof(struct new_child));
   child->fn_copy = fn_copy;
@@ -157,10 +155,9 @@ process_execute (const char *file_name)
 
   tid = new_child->child_tid;
 
-  // Child failed for some reason, free memory and remove child
-  if (tid == TID_ERROR) {
-    list_remove(&new_child->elem);
-    free(new_child);
+  // If child successful, add as child
+  if (tid != TID_ERROR) {
+    list_push_back(&thread_current()->children_list, &new_child->elem);
   }
   free(child);
   return tid;
@@ -190,7 +187,6 @@ start_process (void *child_)
   // If load failed, replace tid with TID_ERROR
   if (!success) {
     thread_current()->my_status->child_tid = TID_ERROR;
-    thread_current()->my_status = NULL;
   }
   sema_up(&child->new_cs->parent_awake); // Wake parent
 
