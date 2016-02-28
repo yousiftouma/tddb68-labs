@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "lib/kernel/bitmap.h"
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -81,6 +82,17 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+
+struct child_status {
+  int exit_code;
+  int ref_cnt;
+  tid_t child_tid;
+  struct semaphore parent_awake;
+  struct lock lock;
+  struct list_elem elem;
+};
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -89,6 +101,8 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    struct list children_list;          /* List of children */
+    struct child_status *my_status;     /* Shared meta data struct with parent */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -145,6 +159,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 struct list* get_sleep_list(void);
+struct thread* get_thread(tid_t tid);
 bool thread_sleep_comp_func(const struct list_elem *a,
                             const struct list_elem *b,
                             void *aux);

@@ -11,6 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "filesys/file.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -112,7 +114,7 @@ struct list* get_sleep_list(void) {
 */
 bool thread_sleep_comp_func(const struct list_elem *a,
                             const struct list_elem *b,
-                            void *aux) {
+                            void *aux UNUSED) {
   struct sleeping_thread *t_a, *t_b;
   t_a = list_entry(a, struct sleeping_thread, elem);
   t_b = list_entry(b, struct sleeping_thread, elem);
@@ -226,7 +228,6 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
   return tid;
 }
 
@@ -308,6 +309,41 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
+  struct child_status* my_status = thread_current()->my_status;
+  
+  // If we are a child
+  if (my_status != NULL) {
+    printf("%s: exit(%d)\n", thread_current()->name, my_status->exit_code);
+    lock_acquire(&my_status->lock);
+    my_status->ref_cnt--;
+    sema_up(&my_status->parent_awake);
+    if (my_status->ref_cnt == 0) {
+      free(my_status); // Parent is dead
+    }
+    else {
+      lock_release(&my_status->lock);
+    }
+  }
+
+  // Free any dead children
+  struct list* children = &thread_current()->children_list;
+  struct list_elem *e;
+
+  e = list_begin(children);
+  while (e != list_end(children)) {
+    struct child_status* cs = list_entry(e, struct child_status, elem);
+    lock_acquire(&cs->lock);
+    cs->ref_cnt--;
+    e = list_remove(e);
+    // Child is dead
+    if (cs->ref_cnt == 0) {
+      free(cs);
+    }
+    else {
+      lock_release(&cs->lock);
+    }
+  }
+
 #ifdef USERPROG
   // Close all files
   if (thread_current()->open_files != NULL && thread_current()->file_ids != NULL) {
@@ -319,7 +355,6 @@ thread_exit (void)
     }
     bitmap_destroy(thread_current()->file_ids); // Release bitmap
   }
-
   process_exit ();
 #endif
 
@@ -479,6 +514,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  list_init(&t->children_list);
+  t->my_status = NULL;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

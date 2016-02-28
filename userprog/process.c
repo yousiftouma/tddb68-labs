@@ -17,9 +17,103 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static struct program_args parse_arguments(char* input);
+void setup_arg_stack(struct program_args args, void** esp);
+
+// Shared struct used to send data to child whilst in creation
+struct new_child
+{
+  char *fn_copy;
+  struct child_status *new_cs;
+};
+
+// Basic struct to hold parsed program arguments
+struct program_args {
+  char* program_name;
+  char* argv[32];
+  int argc;
+};
+
+/*
+  Parses the given input and returns a program_args struct containing the
+  program name (i.e filename), the argument vector and the argument count 
+  (including the file name)
+*/
+static struct program_args parse_arguments(char* input) {
+  
+  struct program_args args;
+  args.argc = 0;
+
+  char* token, *save_ptr;
+  const char delim[] = " ";
+
+  for (token = strtok_r(input, delim, &save_ptr);
+        token != NULL;
+        token = strtok_r(NULL, delim, &save_ptr)) {
+      args.argv[args.argc] = token;
+      args.argc++;
+  }
+  args.program_name = args.argv[0];
+  return args;
+}
+
+/*
+  Setup the stack to Pintos calling convention by placing program arguments
+  correctly etc.
+*/
+void setup_arg_stack(struct program_args args, void** esp) {
+  
+  char* argv_ptrs[args.argc];
+  char* stack_pointer = *esp;
+
+  // Push program args on stack
+  int i;
+  for (i = args.argc - 1; i >= 0; i--) {
+    int str_len = strlen(args.argv[i]) + 1;
+    stack_pointer -= str_len;
+    strlcpy(stack_pointer, args.argv[i], str_len);
+    argv_ptrs[i] = stack_pointer; // Save pointer to this arg
+  }
+
+  // Word align
+  unsigned int stack_addr = (unsigned int) stack_pointer;
+  if (stack_addr % 4 != 0) {
+    stack_pointer -= stack_addr % 4;
+  }
+
+  // Null sentinel
+  char** argv_stack_pointer = (char**) stack_pointer;
+
+  argv_stack_pointer--;
+  *argv_stack_pointer = (char*)0;
+
+
+  // Push argv pointers to stack, pointing actual arguments
+  int j;
+  for (j = args.argc - 1; j >= 0; j--) {
+    argv_stack_pointer--;
+    *argv_stack_pointer = argv_ptrs[j];
+  }
+  char** argv_zero = argv_stack_pointer;
+  argv_stack_pointer--;
+  *argv_stack_pointer = (char*)argv_zero;
+
+  // Push argc
+  stack_pointer = (char*) argv_stack_pointer;
+  stack_pointer -= sizeof(int);
+  int* int_stack_pointer = (int*)stack_pointer;
+  *int_stack_pointer = args.argc;
+
+  // Push null void return pointer
+  void** void_stack_pointer = (void**) int_stack_pointer;
+  void_stack_pointer--;
+  *esp = void_stack_pointer;
+}
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -38,19 +132,44 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  // Init a new child_status shared struct
+  struct child_status* new_child = malloc(sizeof(struct child_status));
+  sema_init(&new_child->parent_awake, 0);
+  new_child->ref_cnt = 2;
+  new_child->exit_code = -1;
+  lock_init(&new_child->lock);
+
+  struct new_child *child = malloc(sizeof(struct new_child));
+  child->fn_copy = fn_copy;
+  child->new_cs = new_child;
+
+  // Parse file name (i.e name of executable) to set correct thread name
+  char* save_ptr;
+  char file_name_copy[strlen(file_name)];
+  strlcpy(file_name_copy, file_name, strlen(file_name) + 1);
+  char* exec_name = strtok_r(file_name_copy, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  thread_create (exec_name, PRI_DEFAULT, start_process, child);
+  sema_down(&new_child->parent_awake); // Wait for child process to wake us
+
+  tid = new_child->child_tid;
+
+  // If child successful, add as child
+  if (tid != TID_ERROR) {
+    list_push_back(&thread_current()->children_list, &new_child->elem);
+  }
+  free(child);
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *child_)
 {
-  char *file_name = file_name_;
+  struct new_child *child = child_;
+  char *file_name = child->fn_copy;
   struct intr_frame if_;
   bool success;
 
@@ -61,10 +180,21 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  // Setup child side of the shared child_status struct
+  thread_current()->my_status = child->new_cs;
+  thread_current()->my_status->child_tid = thread_current()->tid;
+
+  // If load failed, replace tid with TID_ERROR
+  if (!success) {
+    thread_current()->my_status->child_tid = TID_ERROR;
+  }
+  sema_up(&child->new_cs->parent_awake); // Wake parent
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -86,10 +216,25 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while (true);
-  return -1;
+
+  int child_exit_code = -1;
+  struct list* children = &thread_current()->children_list;
+  struct list_elem *e;
+
+  for (e = list_begin(children); e != list_end(children);
+        e = list_next(e)) {
+    struct child_status* cs = list_entry(e, struct child_status, elem);
+    if (cs->child_tid == child_tid) {
+      sema_down(&cs->parent_awake);
+      child_exit_code = cs->exit_code;
+      list_remove(e);
+      free(cs);
+      break; 
+    }
+  }
+  return child_exit_code;
 }
 
 /* Free the current process's resources. */
@@ -230,7 +375,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
    /* Uncomment the following line to print some debug
      information. This will be useful when you debug the program
      stack.*/
-/*#define STACK_DEBUG*/
+//#define STACK_DEBUG
+
+  struct program_args args = parse_arguments((char*)file_name);
+  setup_arg_stack(args, esp);
 
 #ifdef STACK_DEBUG
   printf("*esp is %p\nstack contents:\n", *esp);
@@ -265,6 +413,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
 #endif
 
+  file_name = args.program_name;
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -477,7 +626,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
