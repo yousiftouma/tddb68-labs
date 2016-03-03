@@ -140,6 +140,7 @@ process_execute (const char *file_name)
   new_child->exit_code = -1;
   lock_init(&new_child->lock);
 
+  // Arguments to start_process (file_name, shared struct and semaphore)
   struct start_process_args* args = malloc(sizeof(struct start_process_args));
   args->file_name = fn_copy;
   args->status_struct = new_child;
@@ -153,7 +154,7 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute EXEC_NAME. */
   thread_create (exec_name, PRI_DEFAULT, start_process, args);
-  sema_down(&args->creation_sema);
+  sema_down(&args->creation_sema); // Wait for child to wake us
   tid = new_child->child_tid;
 
   // If child successful, add as child
