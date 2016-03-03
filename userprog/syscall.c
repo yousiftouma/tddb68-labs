@@ -87,9 +87,9 @@ bool is_valid_buffer(void* buf, unsigned int size);
 
 /*
   Increments ptr until we find a null terminator char. Returns false if we step 
-  into an invalid during this process, otherwise returns true
+  into an invalid place during this process, otherwise returns true
 */
-bool is_valid_bytes(char* ptr);
+bool is_valid_string(char* ptr);
 
 static void syscall_handler (struct intr_frame *f UNUSED) {
 
@@ -148,7 +148,7 @@ bool is_valid_ptr(void* ptr) {
       && pagedir_get_page(thread_current()->pagedir, ptr) != NULL;
 }
 
-bool is_valid_bytes(char* ptr) {
+bool is_valid_string(char* ptr) {
   char current_byte;
   do {
     if (!is_valid_ptr(ptr)) {
@@ -177,7 +177,7 @@ bool syscall_create(void* arg_ptr) {
 
   if (!is_valid_ptr(file_name) 
     || !is_valid_ptr(&((int*)arg_ptr)[2])
-    || !is_valid_bytes(file_name)) {
+    || !is_valid_string(file_name)) {
     thread_exit();
   }
     
@@ -189,7 +189,7 @@ int syscall_open(void* arg_ptr) {
   char* file_name = ((char**)arg_ptr)[1];
   if (!is_valid_ptr(file_name) 
     || !is_valid_ptr(&((char**)arg_ptr)[1])
-    || !is_valid_bytes(file_name)) {
+    || !is_valid_string(file_name)) {
   thread_exit();  
   }
 
@@ -278,7 +278,7 @@ pid_t syscall_exec(void* arg_ptr) {
 
   if (!is_valid_ptr(cmd) 
     || !is_valid_ptr(&((char**)arg_ptr)[1])
-    || !is_valid_bytes(cmd)) {
+    || !is_valid_string(cmd)) {
     thread_exit();
   }
   return (pid_t) process_execute(cmd);
