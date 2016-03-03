@@ -25,10 +25,11 @@ static struct program_args parse_arguments(char* input);
 void setup_arg_stack(struct program_args args, void** esp);
 
 // Shared struct used to send data to child whilst in creation
-struct new_child
+struct start_process_args
 {
-  char *fn_copy;
-  struct child_status *new_cs;
+  char *file_name;
+  struct child_status *status_struct;
+  struct semaphore creation_sema;
 };
 
 // Basic struct to hold parsed program arguments
@@ -139,9 +140,10 @@ process_execute (const char *file_name)
   new_child->exit_code = -1;
   lock_init(&new_child->lock);
 
-  struct new_child *child = malloc(sizeof(struct new_child));
-  child->fn_copy = fn_copy;
-  child->new_cs = new_child;
+  struct start_process_args* args = malloc(sizeof(struct start_process_args));
+  args->file_name = fn_copy;
+  args->status_struct = new_child;
+  sema_init(&args->creation_sema, 0);
 
   // Parse file name (i.e name of executable) to set correct thread name
   char* save_ptr;
@@ -149,27 +151,26 @@ process_execute (const char *file_name)
   strlcpy(file_name_copy, file_name, strlen(file_name) + 1);
   char* exec_name = strtok_r(file_name_copy, " ", &save_ptr);
 
-  /* Create a new thread to execute FILE_NAME. */
-  thread_create (exec_name, PRI_DEFAULT, start_process, child);
-  sema_down(&new_child->parent_awake); // Wait for child process to wake us
-
+  /* Create a new thread to execute EXEC_NAME. */
+  thread_create (exec_name, PRI_DEFAULT, start_process, args);
+  sema_down(&args->creation_sema);
   tid = new_child->child_tid;
 
   // If child successful, add as child
   if (tid != TID_ERROR) {
     list_push_back(&thread_current()->children_list, &new_child->elem);
   }
-  free(child);
+  free(args);
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *child_)
+start_process (void *args_)
 {
-  struct new_child *child = child_;
-  char *file_name = child->fn_copy;
+  struct start_process_args* args = args_;
+  char *file_name = args->file_name;
   struct intr_frame if_;
   bool success;
 
@@ -181,14 +182,17 @@ start_process (void *child_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   // Setup child side of the shared child_status struct
-  thread_current()->my_status = child->new_cs;
-  thread_current()->my_status->child_tid = thread_current()->tid;
+  struct child_status* my_status = args->status_struct;
+  thread_current()->my_status = my_status;
 
   // If load failed, replace tid with TID_ERROR
   if (!success) {
-    thread_current()->my_status->child_tid = TID_ERROR;
+    my_status->child_tid = TID_ERROR;
   }
-  sema_up(&child->new_cs->parent_awake); // Wake parent
+  else {
+    my_status->child_tid = thread_current()->tid;
+  }
+  sema_up(&args->creation_sema); // Wake parent from sleep
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
