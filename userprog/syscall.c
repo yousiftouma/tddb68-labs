@@ -75,6 +75,27 @@ void syscall_exit(void* arg_ptr);
 void syscall_halt(void);
 
 /*
+  Sets the current seek position in the file with the given fd
+*/
+void syscall_seek(void* arg_ptr);
+
+/*
+  Returns the current seek position in the file with the given fd
+*/
+unsigned int syscall_tell(void* arg_ptr);
+
+/*
+  Returns the filesize of the file with the given fd
+*/
+int syscall_filesize(void* arg_ptr);
+
+/*
+  Removes the file named file_name, if the file is open it will not be deleted
+  before they are closed
+*/
+bool syscall_remove(void * arg_ptr);
+
+/*
   Returns true if the given pointer is pointing to user space and the location
   is within a allocated page for the user process
 */
@@ -271,6 +292,57 @@ int syscall_read(void* arg_ptr) {
     }
   }
   return bytes_read;
+}
+
+void syscall_seek(void* arg_ptr) {
+  int fd = ((int*)arg_ptr)[1];
+  int pos = ((int*)arg_ptr)[2];
+  if (!is_valid_ptr(&((int*)arg_ptr)[1]) 
+    || !is_valid_ptr(&((int*)arg_ptr)[2])) {
+    thread_exit(); 
+  }
+  if (fd < 128 
+    && fd > 1 
+    && bitmap_test(thread_current()->file_ids, fd) && pos >= 0) {
+    
+    struct file* file = thread_current()->open_files[fd];
+    if (file_length(file) <= pos) {
+      file_seek(file, file_length(file) - 1);
+    }
+    else {
+      file_seek(file, pos);
+    }
+  }
+}
+
+unsigned int syscall_tell(void* arg_ptr) {
+  int fd = ((int*)arg_ptr)[1];
+  if (!is_valid_ptr(&((int*)arg_ptr)[1])) thread_exit(); 
+  
+  if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
+    return file_tell(thread_current()->open_files[fd]);
+  }
+  return 0;
+}
+
+int syscall_filesize(void* arg_ptr) {
+  int fd = ((int*)arg_ptr)[1];
+  if (!is_valid_ptr(&((int*)arg_ptr)[1])) thread_exit(); 
+  
+  if (fd < 128 && fd > 1 && bitmap_test(thread_current()->file_ids, fd)) {
+    return file_length(thread_current()->open_files[fd]);
+  }
+  return -1;
+}
+
+bool syscall_remove(void * arg_ptr) {
+  char* file_name = ((char**)arg_ptr)[1];
+  if (!is_valid_ptr(file_name) 
+    || !is_valid_ptr(&((char**)arg_ptr)[1])
+    || !is_valid_string(file_name)) {
+  thread_exit();  
+  }
+  return filesys_remove(file_name);
 }
 
 pid_t syscall_exec(void* arg_ptr) {
