@@ -147,7 +147,9 @@ inode_open (disk_sector_t sector)
     return NULL;
 
   /* Initialize. */
+  lock_acquire(&inodes_list_lock);
   list_push_front (&open_inodes, &inode->elem);
+  lock_release(&inodes_list_lock);
   inode->sector = sector;
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
@@ -195,7 +197,9 @@ inode_close (struct inode *inode)
   if (--inode->open_cnt == 0)
     {
       /* Remove from inode list and release lock. */
+      lock_acquire(&inodes_list_lock);
       list_remove (&inode->elem);
+      lock_release(&inodes_list_lock);
  
       /* Deallocate blocks if removed. */
       if (inode->removed) 
