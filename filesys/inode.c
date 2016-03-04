@@ -6,6 +6,8 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
+
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -37,6 +39,10 @@ struct inode
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     struct inode_disk data;             /* Inode content. */
+
+    struct lock mutex;                  /* Lock for indode */
+    struct semaphore writers_lock;      /* Lock for writers */
+    int readers_cnt;                    /* Number of current readers */
   };
 
 /* Returns the disk sector that contains byte offset POS within
@@ -57,11 +63,14 @@ byte_to_sector (const struct inode *inode, off_t pos)
    returns the same `struct inode'. */
 static struct list open_inodes;
 
+struct lock inodes_list_lock;
+
 /* Initializes the inode module. */
 void
 inode_init (void) 
 {
   list_init (&open_inodes);
+  lock_init(&inodes_list_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -115,16 +124,22 @@ inode_open (disk_sector_t sector)
   struct inode *inode;
 
   /* Check whether this inode is already open. */
+  lock_acquire(&inodes_list_lock);
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e)) 
     {
       inode = list_entry (e, struct inode, elem);
+      lock_acquire(&inode->mutex);
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
+          lock_release(&inode->mutex);
+          lock_release(&inodes_list_lock);
           return inode; 
         }
+      lock_release(&inode->mutex);
     }
+  lock_release(&inodes_list_lock);
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
@@ -138,6 +153,10 @@ inode_open (disk_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   disk_read (filesys_disk, inode->sector, &inode->data);
+
+  lock_init(&inode->mutex);
+  sema_init(&inode->writers_lock, 1);
+  inode->readers_cnt = 0;
   return inode;
 }
 
@@ -170,6 +189,8 @@ inode_close (struct inode *inode)
   if (inode == NULL)
     return;
 
+  lock_acquire(&inode->mutex);
+
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
@@ -186,6 +207,9 @@ inode_close (struct inode *inode)
 
       free (inode); 
     }
+  else {
+    lock_release(&inode->mutex);
+  }
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
@@ -194,7 +218,9 @@ void
 inode_remove (struct inode *inode) 
 {
   ASSERT (inode != NULL);
+  lock_acquire(&inode->mutex);
   inode->removed = true;
+  lock_release(&inode->mutex);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
@@ -206,6 +232,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
+
+  lock_acquire(&inode->mutex);
+  inode->readers_cnt++;
+  if (inode->readers_cnt == 1) sema_down(&inode->writers_lock);
+  lock_release(&inode->mutex);
 
   while (size > 0) 
     {
@@ -247,6 +278,12 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       offset += chunk_size;
       bytes_read += chunk_size;
     }
+
+  lock_acquire(&inode->mutex);
+  inode->readers_cnt--;
+  if (inode->readers_cnt == 0) sema_up(&inode->writers_lock);
+  lock_release(&inode->mutex);
+
   free (bounce);
 
   return bytes_read;
@@ -267,6 +304,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
+
+  sema_down(&inode->writers_lock);
 
   while (size > 0) 
     {
@@ -315,6 +354,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       offset += chunk_size;
       bytes_written += chunk_size;
     }
+
+  sema_up(&inode->writers_lock);
   free (bounce);
 
   return bytes_written;
