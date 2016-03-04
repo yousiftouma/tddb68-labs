@@ -7,9 +7,13 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "devices/disk.h"
+#include "threads/synch.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
+
+/* Global lock for the dir operations on root_dir */
+struct lock root_dir_lock;
 
 static void do_format (void);
 
@@ -24,6 +28,7 @@ filesys_init (bool format)
 
   inode_init ();
   free_map_init ();
+  lock_init(&root_dir_lock);
 
   if (format) 
     do_format ();
