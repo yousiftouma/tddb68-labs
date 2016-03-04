@@ -127,6 +127,22 @@ static void syscall_handler (struct intr_frame *f UNUSED) {
         syscall_halt();
         break;
 
+      case SYS_SEEK:
+        syscall_seek(arg_ptr);
+        break;
+
+      case SYS_TELL:
+        f->eax = syscall_tell(arg_ptr);
+        break;
+
+      case SYS_FILESIZE:
+        f->eax = syscall_filesize(arg_ptr);
+        break;
+
+      case SYS_REMOVE:
+        f->eax = syscall_remove(arg_ptr);
+        break;
+
       case SYS_WRITE:
         f->eax = syscall_write(arg_ptr);
         break;
