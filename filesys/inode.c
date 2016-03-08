@@ -84,6 +84,7 @@ inode_create (disk_sector_t sector, off_t length)
   struct inode_disk *disk_inode = NULL;
   bool success = false;
 
+  lock_acquire(&inodes_list_lock);
   ASSERT (length >= 0);
 
   /* If this assertion fails, the inode structure is not exactly
@@ -111,6 +112,7 @@ inode_create (disk_sector_t sector, off_t length)
         } 
       free (disk_inode);
     }
+  lock_release(&inodes_list_lock);
   return success;
 }
 
@@ -129,27 +131,22 @@ inode_open (disk_sector_t sector)
        e = list_next (e)) 
     {
       inode = list_entry (e, struct inode, elem);
-      lock_acquire(&inode->mutex);
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
-          lock_release(&inode->mutex);
           lock_release(&inodes_list_lock);
           return inode; 
         }
-      lock_release(&inode->mutex);
     }
-  lock_release(&inodes_list_lock);
 
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
   if (inode == NULL)
+    lock_release(&inodes_list_lock);
     return NULL;
 
   /* Initialize. */
-  lock_acquire(&inodes_list_lock);
   list_push_front (&open_inodes, &inode->elem);
-  lock_release(&inodes_list_lock);
   inode->sector = sector;
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
@@ -159,6 +156,8 @@ inode_open (disk_sector_t sector)
   lock_init(&inode->mutex);
   sema_init(&inode->writers_lock, 1);
   inode->readers_cnt = 0;
+
+  lock_release(&inodes_list_lock);
   return inode;
 }
 
@@ -191,15 +190,13 @@ inode_close (struct inode *inode)
   if (inode == NULL)
     return;
 
-  lock_acquire(&inode->mutex);
+  lock_acquire(&inodes_list_lock);
 
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
       /* Remove from inode list and release lock. */
-      lock_acquire(&inodes_list_lock);
       list_remove (&inode->elem);
-      lock_release(&inodes_list_lock);
  
       /* Deallocate blocks if removed. */
       if (inode->removed) 
@@ -211,9 +208,7 @@ inode_close (struct inode *inode)
 
       free (inode); 
     }
-  else {
-    lock_release(&inode->mutex);
-  }
+  lock_release(&inodes_list_lock);
 }
 
 /* Marks INODE to be deleted when it is closed by the last caller who
@@ -222,9 +217,7 @@ void
 inode_remove (struct inode *inode) 
 {
   ASSERT (inode != NULL);
-  lock_acquire(&inode->mutex);
   inode->removed = true;
-  lock_release(&inode->mutex);
 }
 
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
